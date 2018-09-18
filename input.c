@@ -164,7 +164,7 @@ int main(void)
                 printf("Message: %s\n", message);
                 messageLen = 0;
                 memset(message, 0, 50);
-            } else if (c == 'Q') {
+            } else if (c == 'q') {
                 goto end;
             } else {
                 message[messageLen++] = c;
