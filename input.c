@@ -159,7 +159,7 @@ int main(void)
             char c = getchar();
             printf("%c", c);
             fflush(stdout);
-			if (c == 8) {
+			if (c == '\b') {
 				printf("\n\n\nDELETE\n\n\n");	
 				fflush(stdout);
 			}
