@@ -159,12 +159,16 @@ int main(void)
             char c = getchar();
             printf("%c", c);
             fflush(stdout);
-            if (c == '\n') {
+			if (c == 8) {
+				printf("\n\n\nDELETE\n\n\n");	
+				fflush(stdout);
+			}
+			if (c == '\n') {
                 printf("\033[1A\r");
                 printf("Message: %s\n", message);
                 messageLen = 0;
                 memset(message, 0, 50);
-            } else if (c == 'q') {
+            } else if (c == 'Q') {
                 goto end;
             } else {
                 message[messageLen++] = c;
