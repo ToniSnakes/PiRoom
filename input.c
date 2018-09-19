@@ -159,11 +159,16 @@ int main(void)
             char c = getchar();
             printf("%c", c);
             fflush(stdout);
-			if (c == '\b') {
-				printf("\n\n\nDELETE\n\n\n");	
+			if (c == 127) {
+				//printf("\n\n\nDELETE\n\n\n");	
+				//fflush(stdout);
+				message[--messageLen] = '\0';
+                printf("\r");
+				printf("%s ", message);
+				printf("\033[1D");
 				fflush(stdout);
 			}
-			if (c == '\n') {
+			else if (c == '\n') {
                 printf("\033[1A\r");
                 printf("Message: %s\n", message);
                 messageLen = 0;
