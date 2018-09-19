@@ -245,6 +245,10 @@ int main(int argc, char** argv)
 					messageLen = 0;
 					memset(message, 0, 50);
 				}
+				/*else { // only partly stops the empty line problem
+					printf("\033[1A\r"); // because the terminal is
+					fflush(stdout); // already one line down, so I
+				}*/ // temporarily removed it since it looks weird
 			}
 			else if (c == 'Q') {
 				break;
