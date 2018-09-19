@@ -1,3 +1,5 @@
 server
 client
+!client/
+!server/
 a.out
