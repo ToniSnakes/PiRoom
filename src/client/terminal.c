@@ -159,6 +159,24 @@ int cleanupTerminal()
 }
 #pragma endregion
 
+enum CTRL {
+    CTRL_UP,
+    CTRL_DOWN,
+    CTRL_FORWARD,
+    CTRL_BACK
+};
+enum CTRL parseCtrlCode()
+{
+    if (strcmp(ctrlBuffer, "A"))
+        return CTRL_UP;
+    if (strcmp(ctrlBuffer, "B"))
+        return CTRL_DOWN;
+    if (strcmp(ctrlBuffer, "C"))
+        return CTRL_FORWARD;
+    if (strcmp(ctrlBuffer, "D"))
+        return CTRL_BACK;
+}
+
 int pushLine(const char* line)
 {
     printf("\r%s\n%s", line, messageBuffer);
@@ -222,6 +240,7 @@ int pollMessage(char** msg)
                     if (0x20 <= c && c <= 0x7E) {
                         strncat(ctrlBuffer, &c, 1);
                         if (c >= 0x40) {
+                            parseCtrlCode(); // TODO this
                             ctrlCodeParseStep = 0;
                         }
                         break;
