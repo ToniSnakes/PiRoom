@@ -6,11 +6,14 @@
 
 struct timeval timeout; // select timeout
 struct termios originalState;
-char message[MESSAGE_BUFFER_LEN];
+char messageBuffer[MESSAGE_BUFFER_LEN];
+char ctrlBuffer[CTRL_BUFFER_LEN];
 int messageLen;
 int messageComplete;
 fd_set stdinfds;
+int ctrlCodeParseStep;
 
+#pragma region streamRaw
 /* Call this to change the terminal related to the stream to "raw" state.
  * (Usually you call this with stdin).
  * This means you get all keystrokes, and special keypresses like CTRL-C
@@ -138,17 +141,27 @@ int stream_restore(FILE* const stream, const struct termios* const state)
     return 0;
 }
 
+#pragma endregion
+
+#pragma region setup_cleanup
 int setupTerminal()
 {
-    memset(message, 0, MESSAGE_BUFFER_LEN);
+    memset(messageBuffer, 0, MESSAGE_BUFFER_LEN);
+    memset(ctrlBuffer, 0, CTRL_BUFFER_LEN);
     messageLen = 0;
     messageComplete = 0;
+    ctrlCodeParseStep = 0;
     stream_makeraw(stdin, &originalState);
 }
+int cleanupTerminal()
+{
+    stream_restore(stdin, &originalState);
+}
+#pragma endregion
 
 int pushLine(const char* line)
 {
-    printf("\r%s\n%s", line, message);
+    printf("\r%s\n%s", line, messageBuffer);
     fflush(stdout);
 }
 
@@ -157,14 +170,14 @@ int pollMessage(char** msg)
     if (messageComplete) {
         messageComplete = 0;
         messageLen = 0;
-        memset(message, 0, MESSAGE_BUFFER_LEN);
+        memset(messageBuffer, 0, MESSAGE_BUFFER_LEN);
     }
-    
+
     // timeout is undefined after select (see 'man 2 select')
     timeout = (struct timeval){ .tv_sec = 0, .tv_usec = 0 };
     FD_ZERO(&stdinfds);
     FD_SET(STDIN_FILENO, &stdinfds);
-    
+
     if (select(1, &stdinfds, NULL, NULL, &timeout)) {
         fflush(stdin);
         char c = getchar();
@@ -172,20 +185,17 @@ int pollMessage(char** msg)
         switch (c) {
         case '\x7F': // backspace
             if ((int)messageLen > 0) {
-                message[--messageLen] = '\0';
+                messageBuffer[--messageLen] = '\0';
                 printf("\033[1D \033[1D"); // go back, space, go back
                 fflush(stdout);
             }
             return pollMessage(msg);
         case '\n':
             if (messageLen > 0) {
-                printf("\r");
-                for (int i = 0; i < messageLen; i++)
-                    printf(" ");
-                printf("\r");
+                printf("\r\033[2K"); // move to start, clear entire line
                 fflush(stdout);
 
-                *msg = message;
+                *msg = messageBuffer;
                 messageComplete = 1;
 
                 return messageLen;
@@ -193,10 +203,38 @@ int pollMessage(char** msg)
             return pollMessage(msg);
         case '\003': // Ctrl + C
             printf("\n");
+            fflush(stdout);
             return -1;
+        case '\033': // see https://en.wikipedia.org/wiki/ANSI_escape_code
+            ctrlCodeParseStep = 1;
+            break;
         default:
+            // parse controll code see https://en.wikipedia.org/wiki/ANSI_escape_code
+            if (ctrlCodeParseStep) {
+                if (ctrlCodeParseStep == 1) {
+                    if (c == '[') {
+                        ctrlCodeParseStep = 2;
+                        break;
+                    } else {
+                        ctrlCodeParseStep = 0;
+                    }
+                } else if (ctrlCodeParseStep == 2) {
+                    if (0x20 <= c && c <= 0x7E) {
+                        strncat(ctrlBuffer, &c, 1);
+                        if (c >= 0x40) {
+                            ctrlCodeParseStep = 0;
+                        }
+                        break;
+                    } else {
+                        ctrlCodeParseStep = 0;
+                    }
+                } else {
+                    ctrlCodeParseStep = 0;
+                }
+            }
+            // normal character (add to messageBuffer)
             if (messageLen < MESSAGE_BUFFER_LEN - 1 && c >= 32 && c <= 126) {
-                message[messageLen++] = c;
+                messageBuffer[messageLen++] = c;
                 printf("%c", c);
                 fflush(stdout);
             }
@@ -205,9 +243,4 @@ int pollMessage(char** msg)
     }
 
     return 0;
-}
-
-int cleanupTerminal()
-{
-    stream_restore(stdin, &originalState);
 }
