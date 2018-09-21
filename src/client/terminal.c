@@ -191,7 +191,7 @@ int pollMessage(char** msg)
                 return messageLen;
             }
             return pollMessage(msg);
-        case 'Q':
+        case '\003': // Ctrl + C
             printf("\n");
             return -1;
         default:
