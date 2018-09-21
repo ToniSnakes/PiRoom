@@ -114,6 +114,8 @@ int main(int argc, char** argv)
             pushLine(buffer);
             memset(buffer, 0, BUFFSIZE);
         }
+
+        usleep(100);
     }
 
     cleanupTerminal();

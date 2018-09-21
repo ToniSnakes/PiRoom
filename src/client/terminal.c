@@ -183,6 +183,7 @@ int pollMessage(char** msg)
                 for (int i = 0; i < messageLen; i++)
                     printf(" ");
                 printf("\r");
+                fflush(stdout);
 
                 *msg = message;
                 messageComplete = 1;
@@ -191,9 +192,10 @@ int pollMessage(char** msg)
             }
             return pollMessage(msg);
         case 'Q':
+            printf("\n");
             return -1;
         default:
-            if (messageLen < MESSAGE_BUFFER_LEN - 1) {
+            if (messageLen < MESSAGE_BUFFER_LEN - 1 && c >= 32 && c <= 126) {
                 message[messageLen++] = c;
                 printf("%c", c);
                 fflush(stdout);
