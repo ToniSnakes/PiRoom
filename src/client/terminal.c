@@ -1,4 +1,15 @@
 #include "terminal.h"
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+struct timeval timeout; // select timeout
+struct termios originalState;
+char message[MESSAGE_BUFFER_LEN];
+int messageLen;
+int messageComplete;
+fd_set stdinfds;
 
 /* Call this to change the terminal related to the stream to "raw" state.
  * (Usually you call this with stdin).
@@ -11,7 +22,6 @@
  *
  * The function returns 0 if success, errno error code otherwise.
 */
-
 int stream_makeraw(FILE* const stream, struct termios* const state)
 {
     struct termios old, raw, actual;
@@ -42,8 +52,8 @@ int stream_makeraw(FILE* const stream, struct termios* const state)
     /* Store state, if requested. */
     if (state)
         *state = old; /* Structures can be assigned! */
-	
-	/* New terminal settings are based on current ones. */
+
+    /* New terminal settings are based on current ones. */
     raw = old;
 
     /* Because the terminal needs to be restored to the original state,
@@ -73,8 +83,8 @@ int stream_makeraw(FILE* const stream, struct termios* const state)
     /* Set the new terminal settings. */
     if (tcsetattr(fd, TCSAFLUSH, &raw))
         return errno;
-	
-	/* tcsetattr() is happy even if it did not set *all* settings.
+
+    /* tcsetattr() is happy even if it did not set *all* settings.
      * We need to verify. */
     if (tcgetattr(fd, &actual)) {
         const int saved_errno = errno;
@@ -112,7 +122,7 @@ int stream_restore(FILE* const stream, const struct termios* const state)
     if (fd == -1)
         return errno = EINVAL;
 
-	/* Discard all unread input and untransmitted output. */
+    /* Discard all unread input and untransmitted output. */
     do {
         result = tcflush(fd, TCIOFLUSH);
     } while (result == -1 && errno == EINTR);
@@ -126,4 +136,76 @@ int stream_restore(FILE* const stream, const struct termios* const state)
 
     /* Success. */
     return 0;
+}
+
+int setupTerminal()
+{
+    memset(message, 0, MESSAGE_BUFFER_LEN);
+    messageLen = 0;
+    messageComplete = 0;
+    stream_makeraw(stdin, &originalState);
+}
+
+int pushLine(const char* line)
+{
+    printf("\r%s\n%s", line, message);
+    fflush(stdout);
+}
+
+int pollMessage(char** msg)
+{
+    if (messageComplete) {
+        messageComplete = 0;
+        messageLen = 0;
+        memset(message, 0, MESSAGE_BUFFER_LEN);
+    }
+    
+    // timeout is undefined after select (see 'man 2 select')
+    timeout = (struct timeval){ .tv_sec = 0, .tv_usec = 0 };
+    FD_ZERO(&stdinfds);
+    FD_SET(STDIN_FILENO, &stdinfds);
+    
+    if (select(1, &stdinfds, NULL, NULL, &timeout)) {
+        fflush(stdin);
+        char c = getchar();
+
+        switch (c) {
+        case '\x7F': // backspace
+            if ((int)messageLen > 0) {
+                message[--messageLen] = '\0';
+                printf("\033[1D \033[1D"); // go back, space, go back
+                fflush(stdout);
+            }
+            return pollMessage(msg);
+        case '\n':
+            if (messageLen > 0) {
+                printf("\r");
+                for (int i = 0; i < messageLen; i++)
+                    printf(" ");
+                printf("\r");
+
+                *msg = message;
+                messageComplete = 1;
+
+                return messageLen;
+            }
+            return pollMessage(msg);
+        case 'Q':
+            return -1;
+        default:
+            if (messageLen < MESSAGE_BUFFER_LEN - 1) {
+                message[messageLen++] = c;
+                printf("%c", c);
+                fflush(stdout);
+            }
+            break;
+        }
+    }
+
+    return 0;
+}
+
+int cleanupTerminal()
+{
+    stream_restore(stdin, &originalState);
 }
