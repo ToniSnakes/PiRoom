@@ -1,31 +1,27 @@
-#include "terminal.h"
+/* Terminal Management */
+
+#include "terman.h"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <termios.h>
+#include <stdio.h>
 
-struct timeval timeout; // select timeout
-struct termios originalState;
-char messageBuffer[MESSAGE_BUFFER_LEN];
-char ctrlBuffer[CTRL_BUFFER_LEN];
-int messageLen;
-int messageComplete;
-fd_set stdinfds;
-int ctrlCodeParseStep;
+struct terman_struct {
+    struct termios originalState;
+    char messageBuffer[MESSAGE_BUFFER_LEN];
+    char ctrlBuffer[CTRL_BUFFER_LEN];
+    int messageLen;
+    int cursorOffset;
+    int messageComplete;
+    int ctrlCodeParseStep;
+};
+
 
 #pragma region streamRaw
-/* Call this to change the terminal related to the stream to "raw" state.
- * (Usually you call this with stdin).
- * This means you get all keystrokes, and special keypresses like CTRL-C
- * no longer generate interrupts.
- *
- * You must restore the state before your program exits, or your user wi$
- * frantically have to figure out how to type 'reset' blind, to get thei$
- * back to a sane state.
- *
- * The function returns 0 if success, errno error code otherwise.
-*/
-int stream_makeraw(FILE* const stream, struct termios* const state)
+int terman_streamMakeraw(FILE* const stream, struct termios* const state)
 {
     struct termios old, raw, actual;
     int fd;
@@ -106,11 +102,7 @@ int stream_makeraw(FILE* const stream, struct termios* const state)
     return 0;
 }
 
-/* Call this to restore the saved state.
- *
- * The function returns 0 if success, errno error code otherwise.
-*/
-int stream_restore(FILE* const stream, const struct termios* const state)
+int terman_streamRestore(FILE* const stream, const struct termios* const state)
 {
     int fd, result;
 
@@ -140,22 +132,28 @@ int stream_restore(FILE* const stream, const struct termios* const state)
     /* Success. */
     return 0;
 }
-
 #pragma endregion
 
 #pragma region setup_cleanup
-int setupTerminal()
+Terman* terman_constructor()
 {
-    memset(messageBuffer, 0, MESSAGE_BUFFER_LEN);
-    memset(ctrlBuffer, 0, CTRL_BUFFER_LEN);
-    messageLen = 0;
-    messageComplete = 0;
-    ctrlCodeParseStep = 0;
-    stream_makeraw(stdin, &originalState);
+    Terman* self = malloc(sizeof(Terman));
+    
+    memset(self->messageBuffer, 0, MESSAGE_BUFFER_LEN);
+    memset(self->ctrlBuffer, 0, CTRL_BUFFER_LEN);
+    self->messageLen = 0;
+    self->messageComplete = 0;
+    self->ctrlCodeParseStep = 0;
+    self->cursorOffset = 0;
+
+    terman_streamMakeraw(stdin, &self->originalState);
+    return self;
 }
-int cleanupTerminal()
+void terman_destructor(Terman** self)
 {
-    stream_restore(stdin, &originalState);
+    terman_streamRestore(stdin, &(*self)->originalState);
+    free(*self);
+    *self = NULL;
 }
 #pragma endregion
 
@@ -165,7 +163,7 @@ enum CTRL {
     CTRL_FORWARD,
     CTRL_BACK
 };
-enum CTRL parseCtrlCode()
+enum CTRL parseCtrlCode(const char* ctrlBuffer)
 {
     if (strcmp(ctrlBuffer, "A"))
         return CTRL_UP;
@@ -177,83 +175,87 @@ enum CTRL parseCtrlCode()
         return CTRL_BACK;
 }
 
-int pushLine(const char* line)
+int terman_pushLine(const Terman* self, const char* line)
 {
-    printf("\r%s\n%s", line, messageBuffer);
+    printf("\r%s\n%s", line, self->messageBuffer);
     fflush(stdout);
 }
 
-int pollMessage(char** msg)
-{
-    if (messageComplete) {
-        messageComplete = 0;
-        messageLen = 0;
-        memset(messageBuffer, 0, MESSAGE_BUFFER_LEN);
-    }
-
+int checkStdIn() {
     // timeout is undefined after select (see 'man 2 select')
-    timeout = (struct timeval){ .tv_sec = 0, .tv_usec = 0 };
+    struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
+    fd_set stdinfds;
     FD_ZERO(&stdinfds);
     FD_SET(STDIN_FILENO, &stdinfds);
+    return select(STDIN_FILENO + 1, &stdinfds, NULL, NULL, &timeout);
+}
 
-    if (select(1, &stdinfds, NULL, NULL, &timeout)) {
+int terman_pollMessage(Terman* self, char** msg)
+{
+    if (self->messageComplete) {
+        self->messageComplete = 0;
+        self->messageLen = 0;
+        memset(self->messageBuffer, 0, MESSAGE_BUFFER_LEN);
+    }
+
+    if (checkStdIn()) {
         fflush(stdin);
         char c = getchar();
 
         switch (c) {
         case '\x7F': // backspace
-            if ((int)messageLen > 0) {
-                messageBuffer[--messageLen] = '\0';
+            if (self->messageLen > 0) {
+                self->messageBuffer[--self->messageLen] = '\0';
                 printf("\033[1D \033[1D"); // go back, space, go back
                 fflush(stdout);
             }
-            return pollMessage(msg);
+            return terman_pollMessage(self, msg);
         case '\n':
-            if (messageLen > 0) {
+            if (self->messageLen > 0) {
                 printf("\r\033[2K"); // move to start, clear entire line
                 fflush(stdout);
 
-                *msg = messageBuffer;
-                messageComplete = 1;
+                *msg = self->messageBuffer;
+                self->messageComplete = 1;
 
-                return messageLen;
+                return self->messageLen;
             }
-            return pollMessage(msg);
+            return terman_pollMessage(self, msg);
         case '\003': // Ctrl + C
             printf("\n");
             fflush(stdout);
             return -1;
         case '\033': // see https://en.wikipedia.org/wiki/ANSI_escape_code
-            ctrlCodeParseStep = 1;
+            self->ctrlCodeParseStep = 1;
             break;
         default:
             // parse controll code see https://en.wikipedia.org/wiki/ANSI_escape_code
-            if (ctrlCodeParseStep) {
-                if (ctrlCodeParseStep == 1) {
+            if (self->ctrlCodeParseStep) {
+                if (self->ctrlCodeParseStep == 1) {
                     if (c == '[') {
-                        ctrlCodeParseStep = 2;
+                        self->ctrlCodeParseStep = 2;
                         break;
                     } else {
-                        ctrlCodeParseStep = 0;
+                        self->ctrlCodeParseStep = 0;
                     }
-                } else if (ctrlCodeParseStep == 2) {
+                } else if (self->ctrlCodeParseStep == 2) {
                     if (0x20 <= c && c <= 0x7E) {
-                        strncat(ctrlBuffer, &c, 1);
+                        strncat(self->ctrlBuffer, &c, 1);
                         if (c >= 0x40) {
-                            parseCtrlCode(); // TODO this
-                            ctrlCodeParseStep = 0;
+                            parseCtrlCode(self->ctrlBuffer); // TODO this
+                            self->ctrlCodeParseStep = 0;
                         }
                         break;
                     } else {
-                        ctrlCodeParseStep = 0;
+                        self->ctrlCodeParseStep = 0;
                     }
                 } else {
-                    ctrlCodeParseStep = 0;
+                    self->ctrlCodeParseStep = 0;
                 }
             }
             // normal character (add to messageBuffer)
-            if (messageLen < MESSAGE_BUFFER_LEN - 1 && c >= 32 && c <= 126) {
-                messageBuffer[messageLen++] = c;
+            if (self->messageLen < MESSAGE_BUFFER_LEN - 1 && c >= 32 && c <= 126) {
+                self->messageBuffer[self->messageLen++] = c;
                 printf("%c", c);
                 fflush(stdout);
             }

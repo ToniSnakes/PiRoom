@@ -11,7 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "terminal.h"
+#include "terman.h"
 
 #define PORT 8888
 #define BUFFSIZE 1024
@@ -57,6 +57,16 @@ int createSocketClient(const char* addr, int port, int options, int flags)
         return -1;
     }
 
+    struct timeval timeout = { .tv_sec = 1, .tv_usec = 0 };
+    
+    fd_set servfds;
+    FD_ZERO(&servfds);
+    FD_SET(sockfd, &servfds);
+    if (!select(sockfd + 1, &servfds, NULL, NULL, &timeout)) {
+        perror("timeout");
+        return -1;
+    }
+
     return sockfd;
 }
 
@@ -71,32 +81,14 @@ int main(int argc, char** argv)
         return -1;
     }
 
-
     memset(buffer, 0, BUFFSIZE);
 
-    int activity;
-    struct timeval servto;
-    servto.tv_sec = 1;
-    servto.tv_sec = 0;
-
-    fd_set servfds;
-    FD_ZERO(&servfds);
-    FD_SET(sockfd, &servfds);
-    activity = select(sockfd + 1, &servfds, NULL, NULL, &servto);
-
-    if (!activity) {
-        printf("timeout\n\n\n");
-        fflush(stdout);
-        return -1;
-    }
-    
-    setupTerminal();
+    Terman* mainTerman = terman_constructor();
 
     int quit = 0;
     while (!quit) {
-
         char* msg;
-        int res = pollMessage(&msg);
+        int res = terman_pollMessage(mainTerman, &msg);
         switch (res) {
         case -1:
             quit = 1;
@@ -111,14 +103,14 @@ int main(int argc, char** argv)
         read(sockfd, buffer, BUFFSIZE);
 
         if (strlen(buffer)) { // if there is a new message
-            pushLine(buffer);
+            terman_pushLine(mainTerman, buffer);
             memset(buffer, 0, BUFFSIZE);
         }
 
         usleep(100);
     }
 
-    cleanupTerminal();
+    terman_destructor(&mainTerman);
 
     return 0;
 }
