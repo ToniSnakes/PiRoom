@@ -242,6 +242,7 @@ int terman_pollMessage(Terman* self, char** msg)
     if (self->messageComplete) {
         self->messageComplete = 0;
         self->messageLen = 0;
+        self->cursorOffset = 0;
         memset(self->messageBuffer, 0, MESSAGE_BUFFER_LEN);
     }
 
@@ -266,7 +267,6 @@ int terman_pollMessage(Terman* self, char** msg)
                 *msg = self->messageBuffer;
                 self->messageComplete = 1;
 
-                self->cursorOffset = 0;
                 return self->messageLen;
             }
             return terman_pollMessage(self, msg);
