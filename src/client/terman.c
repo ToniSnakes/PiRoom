@@ -271,7 +271,7 @@ int terman_pollMessage(Terman* self, char** msg)
             }
             return terman_pollMessage(self, msg);
         case '\003': // Ctrl + C
-            printf("\n");
+            printf("^C\n");
             fflush(stdout);
             return -1;
         case '\033': // see https://en.wikipedia.org/wiki/ANSI_escape_code
