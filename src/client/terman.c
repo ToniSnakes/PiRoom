@@ -3,11 +3,20 @@
 #include "terman.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <termios.h>
-#include <stdio.h>
+#include <unistd.h>
+
+enum CTRL {
+    FAILED = -1,
+    PARSING = 0,
+    CTRL_UP = 1,
+    CTRL_DOWN = 2,
+    CTRL_FORWARD = 3,
+    CTRL_BACK = 4
+};
 
 struct terman_struct {
     struct termios originalState;
@@ -18,7 +27,6 @@ struct terman_struct {
     int messageComplete;
     int ctrlCodeParseStep;
 };
-
 
 #pragma region streamRaw
 int terman_streamMakeraw(FILE* const stream, struct termios* const state)
@@ -138,7 +146,7 @@ int terman_streamRestore(FILE* const stream, const struct termios* const state)
 Terman* terman_constructor()
 {
     Terman* self = malloc(sizeof(Terman));
-    
+
     memset(self->messageBuffer, 0, MESSAGE_BUFFER_LEN);
     memset(self->ctrlBuffer, 0, CTRL_BUFFER_LEN);
     self->messageLen = 0;
@@ -157,22 +165,44 @@ void terman_destructor(Terman** self)
 }
 #pragma endregion
 
-enum CTRL {
-    CTRL_UP,
-    CTRL_DOWN,
-    CTRL_FORWARD,
-    CTRL_BACK
-};
-enum CTRL parseCtrlCode(const char* ctrlBuffer)
+enum CTRL parseCtrlCode(Terman* self, char c)
 {
-    if (strcmp(ctrlBuffer, "A"))
-        return CTRL_UP;
-    if (strcmp(ctrlBuffer, "B"))
-        return CTRL_DOWN;
-    if (strcmp(ctrlBuffer, "C"))
-        return CTRL_FORWARD;
-    if (strcmp(ctrlBuffer, "D"))
-        return CTRL_BACK;
+    // parse controll code see https://en.wikipedia.org/wiki/ANSI_escape_code
+    if (self->ctrlCodeParseStep == 1) {
+        if (c == '[') {
+            self->ctrlCodeParseStep = 2;
+            return PARSING;
+        } else {
+            self->ctrlCodeParseStep = 0;
+            return FAILED;
+        }
+    }
+
+    // self->ctrlCodeParseStep == 2
+    if (0x20 <= c && c <= 0x7E) {
+        strncat(self->ctrlBuffer, &c, 1);
+        if (c < 0x40) {
+            return PARSING;
+        } else {
+            enum CTRL rtrn = FAILED;
+
+            if (strcmp(self->ctrlBuffer, "A") == 0)
+                rtrn = CTRL_UP;
+            else if (strcmp(self->ctrlBuffer, "B") == 0)
+                rtrn = CTRL_DOWN;
+            else if (strcmp(self->ctrlBuffer, "C") == 0)
+                rtrn = CTRL_FORWARD;
+            else if (strcmp(self->ctrlBuffer, "D") == 0)
+                rtrn = CTRL_BACK;
+
+            self->ctrlCodeParseStep = 0;
+            memset(self->ctrlBuffer, 0, CTRL_BUFFER_LEN);
+            return rtrn;
+        }
+    }
+
+    self->ctrlCodeParseStep = 0;
+    return FAILED;
 }
 
 int terman_pushLine(const Terman* self, const char* line)
@@ -181,13 +211,30 @@ int terman_pushLine(const Terman* self, const char* line)
     fflush(stdout);
 }
 
-int checkStdIn() {
+int checkStdIn()
+{
     // timeout is undefined after select (see 'man 2 select')
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
     fd_set stdinfds;
     FD_ZERO(&stdinfds);
     FD_SET(STDIN_FILENO, &stdinfds);
     return select(STDIN_FILENO + 1, &stdinfds, NULL, NULL, &timeout);
+}
+
+int strninsert(char* str, char insert, int offset, int length)
+{
+    int i;
+    for (i = length; i > offset; i--) {
+        str[i] = str[i - 1];
+    }
+    str[i] = insert;
+}
+
+int strnremove(char* str, int offset, int length)
+{
+    for (int i = offset; i < length; i++) {
+        str[i] = str[i + 1];
+    }
 }
 
 int terman_pollMessage(Terman* self, char** msg)
@@ -204,9 +251,10 @@ int terman_pollMessage(Terman* self, char** msg)
 
         switch (c) {
         case '\x7F': // backspace
-            if (self->messageLen > 0) {
-                self->messageBuffer[--self->messageLen] = '\0';
-                printf("\033[1D \033[1D"); // go back, space, go back
+            if (self->cursorOffset < self->messageLen) {
+                strnremove(self->messageBuffer, self->messageLen - self->cursorOffset - 1, self->messageLen);
+                self->messageLen--;
+                printf("\033[D%s \033[%dD", self->messageBuffer + self->messageLen - self->cursorOffset, self->cursorOffset + 1);
                 fflush(stdout);
             }
             return terman_pollMessage(self, msg);
@@ -218,6 +266,7 @@ int terman_pollMessage(Terman* self, char** msg)
                 *msg = self->messageBuffer;
                 self->messageComplete = 1;
 
+                self->cursorOffset = 0;
                 return self->messageLen;
             }
             return terman_pollMessage(self, msg);
@@ -229,34 +278,30 @@ int terman_pollMessage(Terman* self, char** msg)
             self->ctrlCodeParseStep = 1;
             break;
         default:
-            // parse controll code see https://en.wikipedia.org/wiki/ANSI_escape_code
             if (self->ctrlCodeParseStep) {
-                if (self->ctrlCodeParseStep == 1) {
-                    if (c == '[') {
-                        self->ctrlCodeParseStep = 2;
-                        break;
-                    } else {
-                        self->ctrlCodeParseStep = 0;
+                enum CTRL ctrl = parseCtrlCode(self, c);
+                if (ctrl == PARSING)
+                    break;
+                if (ctrl != FAILED) {
+                    if (ctrl == CTRL_BACK && self->cursorOffset < self->messageLen) {
+                        self->cursorOffset++;
+                        printf("\033[D");
+                    } else if (ctrl == CTRL_FORWARD && self->cursorOffset > 0) {
+                        self->cursorOffset--;
+                        printf("\033[C");
                     }
-                } else if (self->ctrlCodeParseStep == 2) {
-                    if (0x20 <= c && c <= 0x7E) {
-                        strncat(self->ctrlBuffer, &c, 1);
-                        if (c >= 0x40) {
-                            parseCtrlCode(self->ctrlBuffer); // TODO this
-                            self->ctrlCodeParseStep = 0;
-                        }
-                        break;
-                    } else {
-                        self->ctrlCodeParseStep = 0;
-                    }
-                } else {
-                    self->ctrlCodeParseStep = 0;
+                    fflush(stdout);
+                    break;
                 }
             }
+
             // normal character (add to messageBuffer)
             if (self->messageLen < MESSAGE_BUFFER_LEN - 1 && c >= 32 && c <= 126) {
-                self->messageBuffer[self->messageLen++] = c;
-                printf("%c", c);
+                strninsert(self->messageBuffer, c, self->messageLen - self->cursorOffset, self->messageLen);
+                self->messageLen++;
+                printf("%c%s", c, self->messageBuffer + self->messageLen - self->cursorOffset);
+                if (self->cursorOffset != 0)
+                    printf("\033[%dD", self->cursorOffset); // go left self->cursorOffset times
                 fflush(stdout);
             }
             break;
