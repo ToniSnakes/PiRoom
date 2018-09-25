@@ -1,5 +1,4 @@
-server
-client
-!client/
-!server/
 a.out
+*.o
+bin/
+testdb
