@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <sqlite3.h> // sqlite
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> //strlen
@@ -10,19 +11,9 @@
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <sys/types.h>
 #include <unistd.h> //close
-#include <sqlite3.h> // sqlite
+#include "sqliteRun.h"
 #define PORT 8888
 #define BUFFSIZE 1024
-
-// A callback function to be invoked for each result row coming out 
-// of the evaluated SQL statements
-// The first paramater is taken from the fourth paramater of
-// sqlite3_exec and in this case I use it to send the user sd
-// The other paramaters are the results from the statements
-static int callback(void *NotUsed, int argc, char **argv, char **azColName);
-
-// Takes the command and runs it with sqlite3_exec
-void runCommand (sqlite3 *db, char *command, int user, char *zErrMsg);
 
 int main(int argc, char** argv)
 {
@@ -39,17 +30,17 @@ int main(int argc, char** argv)
     int valread; // return value of read
     int client_socket[30];
     int activity; // value of activity
-	sqlite3 *db; // the server's database
-	char *zErrMsg = 0; // error message for sqlite
-	char *database = "testdb"; // placeholder
-	int rc; // return from database opening
-	
-	rc = sqlite3_open(database, &db);
-	if ( rc ) {
-		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-		sqlite3_close(db);
-		return (1);
-	}
+    sqlite3* db; // the server's database
+    char* zErrMsg = 0; // error message for sqlite
+    char* database = "testdb"; // placeholder
+    int rc; // return from database opening
+
+    rc = sqlite3_open(database, &db);
+    if (rc) {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        return (1);
+    }
 
     for (int i = 0; i < max_clients; ++i) {
         client_socket[i] = 0;
@@ -172,13 +163,13 @@ int main(int argc, char** argv)
                     // set the string terminating NULL byte on the
                     // end of the data read
                     buffer[valread] = '\0';
-					// if the buffer is a command known
-					char *scommand = "/list users";
-					if (strcmp(scommand, buffer) == 0) {
-						char *command = "SELECT * FROM test;";
-						runCommand(db, command, sd, zErrMsg);
-						continue;
-					}
+                    // if the buffer is a command known
+                    char* scommand = "/list users";
+                    if (strcmp(scommand, buffer) == 0) {
+                        char* command = "SELECT * FROM test;";
+                        runCommand(db, command, sd, zErrMsg);
+                        continue;
+                    }
                     char message[BUFFSIZE];
                     char* prefix = "Client ";
                     char* prefix2 = ": ";
