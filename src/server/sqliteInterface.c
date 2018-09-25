@@ -12,9 +12,9 @@
 // The first paramater is taken from the fourth paramater of
 // sqlite3_exec and in this case I use it to send the user sd
 // The other paramaters are the results from the statements
-static int callback(void* NotUsed, int argc, char** argv, char** azColName)
+static int callback(void* plan, int argc, char** argv, char** azColName)
 {
-    int user = *((int*)NotUsed);
+    int user = *((int*)plan);
     //printf("%d\n", user);
     int i;
     for (i = 0; i < argc; i++) {

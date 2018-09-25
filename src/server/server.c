@@ -17,6 +17,20 @@
 #define BUFFSIZE 1024
 #define MAX_CLIENTS 30
 
+int client_socket[MAX_CLIENTS];
+
+void sendToAll(int sender, char* msg)
+{
+    for (int j = 0; j < MAX_CLIENTS; ++j) {
+        int fd = client_socket[j];
+        if (fd > 0) {
+            if (dprintf(fd, "Client %c: %s", 'A' + sender, msg) <= 0) {
+                printf("Could not send message to %d!\n", fd);
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     int master_socket; // master socket, duh
@@ -27,7 +41,6 @@ int main(int argc, char** argv)
     int new_socket; // new socket, duuh
     char* welcome = "Welcome to the server!\n";
     int valread; // return value of read
-    int client_socket[MAX_CLIENTS];
     int activity; // value of activity
     sqlite3* db; // the server's database
     char* database = "testdb"; // placeholder
@@ -162,24 +175,6 @@ int main(int argc, char** argv)
                             char* command = "SELECT * FROM test;";
                             runCommand(db, command, sd);
                             continue;
-                        }
-                    }
-                    char message[BUFFSIZE];
-                    char* prefix = "Client ";
-                    char* prefix2 = ": ";
-                    char name = 'A' + i;
-                    strcpy(message, prefix);
-                    int plen = strlen(prefix);
-                    message[plen] = name;
-                    message[plen + 1] = '\0';
-                    strcat(message, prefix2);
-                    strcat(message, buffer);
-                    for (int j = 0; j < MAX_CLIENTS; ++j) {
-                        int csd = client_socket[j];
-                        if (csd > 0) {
-                            if (send(csd, message, strlen(message), 0) != strlen(message)) {
-                                printf("Could not send message to %d!\n", csd);
-                            }
                         }
                     }
                 }
