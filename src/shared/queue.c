@@ -43,6 +43,7 @@ void queue_checkEnlarge(queue_t* queue)
     }
 }
 
+// enque
 void queue_enqueue(queue_t* queue, void* item)
 {
     queue_checkEnlarge(queue);
