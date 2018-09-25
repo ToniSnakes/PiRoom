@@ -1,3 +1,5 @@
+#include "sqliteRun.h"
+
 #include <arpa/inet.h> //close
 #include <errno.h>
 #include <fcntl.h>
@@ -11,7 +13,7 @@
 #include <sys/time.h> //FD_SET, FD_ISSET, FD_ZERO macros
 #include <sys/types.h>
 #include <unistd.h> //close
-#include "sqliteRun.h"
+
 #define PORT 8888
 #define BUFFSIZE 1024
 

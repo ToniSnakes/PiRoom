@@ -9,6 +9,10 @@
 #include <termios.h>
 #include <unistd.h>
 
+#define MESSAGE_BUFFER_LEN 256
+#define CTRL_BUFFER_LEN 16
+
+
 enum CTRL {
     FAILED = -1,
     PARSING = 0,

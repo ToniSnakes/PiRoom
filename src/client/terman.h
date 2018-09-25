@@ -1,9 +1,6 @@
 #include <termios.h>
 #include <stdio.h>
 
-#define MESSAGE_BUFFER_LEN 256
-#define CTRL_BUFFER_LEN 16
-
 typedef struct terman_struct Terman;
 
 Terman* terman_constructor();
