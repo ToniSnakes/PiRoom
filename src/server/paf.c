@@ -2,14 +2,20 @@
 
 #include "paf.h"
 #include "queue.h"
+#include "vec.h"
 
 #include <stdlib.h>
+#include <string.h>
+
+#define BUFFSIZE 1024 * sizeof(char)
 
 struct paf_struct_t {
     size_t planSize;
     void (*handleStep)(void*);
     void (*createPlan)(char*, void*);
     queue_t* tasks;
+    // Efficiency could be improved with proper alignment
+    vec_t* plans;
 };
 
 paf_t* paf_init(
@@ -22,13 +28,15 @@ paf_t* paf_init(
         .handleStep = handleStep,
         .createPlan = createPlan,
         .tasks = queue_init(8),
-        .planSize = planSize
+        .planSize = planSize,
+        .plans = vec_init(BUFFSIZE + planSize, 4)
     };
 }
 
 void paf_free(paf_t** paf)
 {
     queue_free(&(*paf)->tasks);
+    vec_free(&(*paf)->plans);
     free(*paf);
     *paf = NULL;
 }
@@ -37,9 +45,9 @@ void paf_free(paf_t** paf)
 // plan in another thread.
 void paf_newMessage(paf_t* paf, char* message)
 {
-    // for more efficiency we could manually allocate a space for the plan.
-    void* plan = malloc(paf->planSize);
-    paf->createPlan(message, plan);
+    void* plan = vec_allocItem(paf->plans);
+    strncpy(plan + paf->planSize, message, BUFFSIZE);
+    paf->createPlan(plan + paf->planSize, plan);
     queue_enqueue(paf->tasks, plan);
 }
 
@@ -61,9 +69,9 @@ void paf_finishStep(paf_t* paf, void* plan)
     queue_enqueue(paf->tasks, plan);
 }
 
-// this gets called when whe are done with one message. If we ever manally
-// allocate the plan, we can properly free it up right here.
+// this gets called when whe are done with one message. Here we free up the
+// plan.
 void paf_finishFinalStep(paf_t* paf, void* plan)
 {
-    free(plan);
+    vec_freeItem(paf->plans, plan);
 }

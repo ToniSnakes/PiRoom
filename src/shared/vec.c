@@ -1,3 +1,4 @@
+#include "vec.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,8 +8,6 @@ struct vec_struct_t {
     unsigned int count;
     void* data;
 };
-
-typedef struct vec_struct_t vec_t;
 
 vec_t* vec_init(size_t itemSize, unsigned int capacity)
 {
