@@ -2,7 +2,7 @@
 
 # define dependecys
 SERVER_SRC=paf.c paf.h server.c sqliteInterface.c sqliteInterface.h
-SERVER_DEPS=queue sqlite3
+SERVER_DEPS=queue vec sqlite3
 
 CLIENT_SRC=client.c terman.c terman.h
 CLIENT_DEPS=
