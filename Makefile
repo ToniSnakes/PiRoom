@@ -3,18 +3,19 @@
 # define dependecys
 SERVER_SRC=paf.c paf.h server.c sqliteInterface.c sqliteInterface.h
 SERVER_DEPS=queue vec sqlite3
+SERVER_LIBS=-lpthread -ldl
 
 CLIENT_SRC=client.c terman.c terman.h
 CLIENT_DEPS=
+CLIENT_LIBS=
 
-# libs and dirs
-LIBS=-lpthread -ldl
+# dirs
 INCLUDE_DIR=include/
 ODIR=bin/obj/
 
 # compiler and flags
 CC=gcc
-CFLAGS=-I$(INCLUDE_DIR) $(LIBS)
+CFLAGS=-I$(INCLUDE_DIR)
 
 # generate dependencys (strong are used in gcc command)
 _WEAK_CLIENT_DEPS=$(call weak_deps, $(CLIENT_DEPS), $(CLIENT_SRC), src/client/)
@@ -54,7 +55,7 @@ $(ODIR)%.o: deps/%.c
 
 # build client and server
 bin/server: $(_SERVER_DEPS) $(_WEAK_SERVER_DEPS)
-	$(CC) $(_SERVER_DEPS) -o $@ $(CFLAGS)
+	$(CC) $(_SERVER_DEPS) -o $@ $(CFLAGS) $(SERVER_LIBS)
 
 bin/client: $(_CLIENT_DEPS) $(_WEAK_CLIENT_DEPS)
-	$(CC) $(_CLIENT_DEPS) -o $@ $(CFLAGS)
+	$(CC) $(_CLIENT_DEPS) -o $@ $(CFLAGS) $(CLIENT_LIBS)
