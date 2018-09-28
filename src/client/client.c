@@ -96,7 +96,7 @@ int main(int argc, char** argv)
         case 0:
             break;
         default:
-            send(sockfd, msg, res, 0);
+            dprintf(sockfd, "%s\n", msg);
             break;
         }
 

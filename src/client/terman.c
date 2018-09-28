@@ -211,7 +211,7 @@ enum CTRL parseCtrlCode(Terman* self, char c)
 
 int terman_pushLine(const Terman* self, const char* line)
 {
-    printf("\r%s\n%s", line, self->messageBuffer);
+    printf("\r%s%s", line, self->messageBuffer);
     fflush(stdout);
 }
 
