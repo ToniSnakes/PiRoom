@@ -11,8 +11,8 @@
 
 struct paf_struct_t {
     size_t planSize;
-    void (*handleStep)(void*);
-    void (*createPlan)(char*, void*);
+    void (*handleStep)(const char*, void*);
+    void (*createPlan)(const char*, void*);
     queue_t* tasks;
     // Efficiency could be improved with proper alignment
     vec_t* plans;
@@ -20,8 +20,8 @@ struct paf_struct_t {
 
 paf_t* paf_init(
     size_t planSize,
-    void (*handleStep)(void* plan),
-    void (*createPlan)(char* message, void* plan))
+    void (*handleStep)(const char* message, void* plan),
+    void (*createPlan)(const char* message, void* plan))
 {
     paf_t* paf = malloc(sizeof(paf_t));
     *paf = (paf_t){
@@ -43,12 +43,16 @@ void paf_free(paf_t** paf)
 
 // in a multithread environment this function would copy message and run create
 // plan in another thread.
-void paf_newMessage(paf_t* paf, char* message)
+void paf_newMessage(paf_t* paf, char* message, void* planInit)
 {
     void* plan = vec_allocItem(paf->plans);
-    strncpy(plan + paf->planSize, message, BUFFSIZE);
-    paf->createPlan(plan + paf->planSize, plan);
-    queue_enqueue(paf->tasks, plan);
+    if (planInit != NULL)
+        memcpy(plan, planInit, paf->planSize);
+
+    char* msg = (char*)plan + paf->planSize;
+    strncpy(msg, message, BUFFSIZE);
+
+    paf->createPlan(msg, plan);
 }
 
 // in a multithread environment this function would dispatch the first item in
@@ -60,7 +64,7 @@ void paf_dispatch(paf_t* paf)
     if (plan == NULL)
         return;
 
-    paf->handleStep(plan);
+    paf->handleStep((char*)plan + paf->planSize, plan);
 }
 
 // this gets called at the end of a processing step
