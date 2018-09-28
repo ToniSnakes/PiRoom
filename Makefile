@@ -1,7 +1,9 @@
 # make the client and server programs of PiRoom
 
+DEBUG=true
+
 # define dependecys
-SERVER_SRC=paf.c paf.h server.c sqliteInterface.c sqliteInterface.h
+SERVER_SRC=paf.c paf.h server.c #sqliteInterface.c sqliteInterface.h
 SERVER_DEPS=queue vec sqlite3
 SERVER_LIBS=-lpthread -ldl
 
@@ -15,7 +17,7 @@ ODIR=bin/obj/
 
 # compiler and flags
 CC=gcc
-CFLAGS=-I$(INCLUDE_DIR)
+CFLAGS=-I$(INCLUDE_DIR) $(if $(DEBUG), -g)
 
 # generate dependencys (strong are used in gcc command)
 _WEAK_CLIENT_DEPS=$(call weak_deps, $(CLIENT_DEPS), $(CLIENT_SRC), src/client/)
