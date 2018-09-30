@@ -3,13 +3,13 @@
 
 #include "queue.h"
 
-struct queue_struct_t {
+struct queue_struct {
     unsigned int capacity;
     unsigned int count;
     unsigned int offset;
     void** data;
 };
-typedef struct queue_struct_t queue_t;
+typedef struct queue_struct queue_t;
 
 const queue_t empty_queue = { .capacity = 0, .offset = 0, .count = 0, .data = NULL };
 

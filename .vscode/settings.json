@@ -2,7 +2,8 @@
     "files.associations": {
         "terminal.h": "c",
         "queue.h": "c",
-        "vec.h": "c"
+        "vec.h": "c",
+        "sqlite3.h": "c"
     },
     "C_Cpp.default.cStandard": "c99"
 }

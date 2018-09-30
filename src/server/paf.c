@@ -9,7 +9,7 @@
 
 #define BUFFSIZE 1024 * sizeof(char)
 
-struct paf_struct_t {
+struct paf_struct {
     size_t planSize;
     void (*handleStep)(const char*, void*);
     void (*createPlan)(const char*, void*);

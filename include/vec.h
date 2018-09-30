@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-typedef struct vec_struct_t vec_t;
+typedef struct vec_struct vec_t;
 
 vec_t* vec_init(size_t itemSize, unsigned int capacity);
 void vec_free(vec_t** vec);

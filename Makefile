@@ -2,27 +2,30 @@
 
 DEBUG=true
 
+# dirs
+INCLUDE_DIR=include/
+ODIR=bin/obj/
+
 # define dependecys
 SERVER_SRC=paf.c paf.h server.c #sqliteInterface.c sqliteInterface.h
 SERVER_DEPS=queue vec sqlite3
+SERVER_EXTRA_DEPS=$(include)initDB.h
 SERVER_LIBS=-lpthread -ldl
 
 CLIENT_SRC=client.c terman.c terman.h
 CLIENT_DEPS=
+CLIENT_EXTRA_DEPS=
 CLIENT_LIBS=
 
-# dirs
-INCLUDE_DIR=include/
-ODIR=bin/obj/
 
 # compiler and flags
 CC=gcc
 CFLAGS=-I$(INCLUDE_DIR) $(if $(DEBUG), -g)
 
 # generate dependencys (strong are used in gcc command)
-_WEAK_CLIENT_DEPS=$(call weak_deps, $(CLIENT_DEPS), $(CLIENT_SRC), src/client/)
+_WEAK_CLIENT_DEPS=$(call weak_deps, $(CLIENT_DEPS), $(CLIENT_SRC), src/client/) $(CLIENT_EXTRA_DEPS)
 _CLIENT_DEPS=$(call strong_deps, $(CLIENT_DEPS), $(CLIENT_SRC), src/client/)
-_WEAK_SERVER_DEPS=$(call weak_deps, $(SERVER_DEPS), $(SERVER_SRC), src/server/)
+_WEAK_SERVER_DEPS=$(call weak_deps, $(SERVER_DEPS), $(SERVER_SRC), src/server/) $(SERVER_EXTRA_DEPS)
 _SERVER_DEPS=$(call strong_deps, $(SERVER_DEPS), $(SERVER_SRC), src/server/)
 
 # functions to generate deps
@@ -39,6 +42,7 @@ server: bin/server
 .PHONY: client
 client: bin/client
 	@echo "client done"
+.PHONY: remake
 remake: clean all
 	@echo "remake done"
 
@@ -47,13 +51,18 @@ remake: clean all
 clean: 
 	rm -rf bin/
 	mkdir -p $(ODIR)
-.PHONY: remake
 
 # build dependencys and shared code
 $(ODIR)%.o: src/shared/%.c
 	$(CC) -c -o $@ $^ $(CFLAGS)
 $(ODIR)%.o: deps/%.c
 	$(CC) -c -o $@ $^ $(CFLAGS)
+
+# this copys the db initialisation in initDB.sql into a string in include/initDB.h
+$(include)initDB.h: src/database/initDB.sql
+	echo "const char initDB[] =" > include/initDB.h
+	cat src/database/initDB.sql | sed -e 's/\\/\\\\/g;s/"/\\"/g;s/\(.*\)/"\1"/' >> include/initDB.h
+	echo ";" >> include/initDB.h
 
 # build client and server
 bin/server: $(_SERVER_DEPS) $(_WEAK_SERVER_DEPS)

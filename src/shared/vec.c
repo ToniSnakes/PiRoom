@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct vec_struct_t {
+struct vec_struct {
     size_t itemSize;
     unsigned int capacity;
     unsigned int count;

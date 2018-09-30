@@ -1,4 +1,4 @@
-typedef struct queue_struct_t queue_t;
+typedef struct queue_struct queue_t;
 
 queue_t* queue_init(int capacity);
 void queue_free(queue_t** queue);

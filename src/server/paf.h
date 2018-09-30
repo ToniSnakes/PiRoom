@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-typedef struct paf_struct_t paf_t;
+typedef struct paf_struct paf_t;
 
 paf_t* paf_init(
     size_t planSize,
