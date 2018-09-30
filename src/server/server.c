@@ -12,7 +12,6 @@
 #include <unistd.h> //close
 
 #include "paf.h"
-#include "sqlite3.h"
 
 #define PORT 8888
 #define BUFFSIZE 1024
@@ -35,8 +34,7 @@ typedef struct {
     } data;
 } plan_t;
 
-paf_t* paf;
-sqlite3* db;
+paf_t* paf; 
 int master_socket;
 int client_socket[MAX_CLIENTS];
 char buffer[BUFFSIZE];
@@ -183,10 +181,9 @@ int main(int argc, char** argv)
     paf = paf_init(sizeof(plan_t), nextStep, parseRequest);
 
 #pragma region init_sqlite
-    int rc = sqlite3_open("testdb", &db);
+    int rc = ;
     if (rc) {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-        sqlite3_close(db);
+        
         return (1);
     }
 #pragma endregion
@@ -209,7 +206,7 @@ int main(int argc, char** argv)
         int max_sd = createDescriptorSet(&readfds);
 
         // wait for an activity on one of the sockets, timeout NULL
-        // so wait indefinately
+        // so wait indefinitely
         if ((select(max_sd + 1, &readfds, NULL, NULL, NULL) < 0) && (errno != EINTR)) {
             printf("select error");
         }
