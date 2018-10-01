@@ -12,60 +12,14 @@
 #include <unistd.h> //close
 
 #include "paf.h"
+#include "server.h"
+#include "storage.h"
 
-#define PORT 8888
-#define BUFFSIZE 1024
-#define MAX_CLIENTS 30
-
-typedef struct {
-    int sender;
-    enum {
-        ECHO = 1,
-        LIST = 2,
-        ERROR = 3
-    } id;
-    union {
-        struct {
-            char dbName[32];
-        } list;
-        struct {
-            char msg[32];
-        } error;
-    } data;
-} plan_t;
-
-paf_t* paf; 
+paf_t* paf;
 int master_socket;
 int client_socket[MAX_CLIENTS];
 char buffer[BUFFSIZE];
-
-// A callback function to be invoked for each result row coming out
-// of the evaluated SQL statements
-// The first paramater is taken from the fourth paramater of
-// sqlite3_exec and in this case I use it to send the user sd
-// The other paramaters are the results from the statements
-static int callback(void* plan_void, int argc, char** argv, char** azColName)
-{
-    plan_t* plan = plan_void;
-    for (int i = 0; i < argc; i++) {
-        char message[BUFFSIZE];
-        snprintf(message, BUFFSIZE, "%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-
-        send(plan->sender, message, strlen(message), 0);
-    }
-    paf_finishFinalStep(paf, plan);
-    return 0;
-}
-
-void runCommand(sqlite3* db, char* command, plan_t* plan)
-{
-    char* errorMsg;
-    int rc = sqlite3_exec(db, command, callback, plan, &errorMsg);
-    if (rc != SQLITE_OK) {
-        fprintf(stderr, "SQL error: %s\n", errorMsg);
-        sqlite3_free(errorMsg);
-    }
-}
+storage_t* storage;
 
 void sendToAll(int sender, const char* msg)
 {
@@ -118,7 +72,7 @@ void nextStep(const char* msg, void* plan_void)
     case LIST:
         printf("listing\n");
         snprintf(cmd, 64, "SELECT * FROM %s", plan->data.list.dbName);
-        runCommand(db, cmd, plan);
+        runCommand(storage, cmd, plan);
         break;
     case ERROR:
     default:
@@ -174,19 +128,66 @@ int createSocket()
     return 0;
 }
 
+int addNewClient()
+{
+    struct sockaddr_in address;
+    socklen_t addrlen;
+    int new_socket;
+    if ((new_socket = accept(master_socket, (struct sockaddr*)&address, &addrlen)) < 0) {
+        perror("accept failure");
+        return -1;
+    }
+
+    // describe the new connection
+    printf("New connection, socket fd is %d, ip is: %s, port: %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+    //send new connection greeting message
+    if (dprintf(new_socket, "Welcome to the server!\n") <= 0) {
+        printf("Welcome message not sent!\n");
+    } else {
+        printf("New client welcomed!\n");
+    }
+
+    //add new socket to array of sockets
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        // if position is empty;
+        if (client_socket[i] == 0) {
+            client_socket[i] = new_socket;
+            printf("Adding to list of sockets as %d\n", i);
+            break;
+        }
+    }
+}
+
+void handleClient(int sd, int i)
+{
+    //check if it was for closing, and read the
+    //incoming message
+    int valread;
+    if ((valread = read(sd, buffer, BUFFSIZE - 1)) == 0) {
+        // somebody disconnected, get his details and
+        // print
+        struct sockaddr_in address;
+        socklen_t addrlen;
+        getpeername(sd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+        printf("Host disconnected, ip %s, port %d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+
+        // close the socket and mark as 0 in the list
+        close(sd);
+        client_socket[i] = 0;
+    } else {
+        plan_t planInit = { .sender = sd };
+        buffer[valread] = '\0';
+        paf_newMessage(paf, buffer, &planInit);
+    }
+}
+
 int main(int argc, char** argv)
 {
     memset(client_socket, 0, MAX_CLIENTS * sizeof(int));
 
     paf = paf_init(sizeof(plan_t), nextStep, parseRequest);
 
-#pragma region init_sqlite
-    int rc = ;
-    if (rc) {
-        
-        return (1);
-    }
-#pragma endregion
+    storage = storage_init("testdb");
 
     if (createSocket() == -1)
         return -1;
@@ -202,7 +203,8 @@ int main(int argc, char** argv)
     while (1) {
         paf_dispatch(paf);
 
-        fd_set readfds; // set of socket descriptors
+        // set of socket descriptors
+        fd_set readfds;
         int max_sd = createDescriptorSet(&readfds);
 
         // wait for an activity on one of the sockets, timeout NULL
@@ -213,36 +215,9 @@ int main(int argc, char** argv)
 
         //if something happened on the master socket,
         // then it's an incoming connection
-        if (FD_ISSET(master_socket, &readfds)) {
-#pragma region add_new_client
-            struct sockaddr_in address;
-            socklen_t addrlen;
-            int new_socket;
-            if ((new_socket = accept(master_socket, (struct sockaddr*)&address, &addrlen)) < 0) {
-                perror("accept failure");
+        if (FD_ISSET(master_socket, &readfds))
+            if (addNewClient() == -1)
                 return -1;
-            }
-
-            // describe the new connection
-            printf("New connection, socket fd is %d, ip is: %s, port: %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-            //send new connection greeting message
-            if (dprintf(new_socket, "Welcome to the server!\n") <= 0) {
-                printf("Welcome message not sent!\n");
-            } else {
-                printf("New client welcomed!\n");
-            }
-
-            //add new socket to array of sockets
-            for (int i = 0; i < MAX_CLIENTS; ++i) {
-                // if position is empty;
-                if (client_socket[i] == 0) {
-                    client_socket[i] = new_socket;
-                    printf("Adding to list of sockets as %d\n", i);
-                    break;
-                }
-            }
-#pragma endregion
-        }
 
         for (int i = 0; i < MAX_CLIENTS; ++i) {
             int sd = client_socket[i];
@@ -250,27 +225,7 @@ int main(int argc, char** argv)
             if (!FD_ISSET(sd, &readfds))
                 continue;
 
-#pragma region communicate_with_client
-            //check if it was for closing, and read the
-            //incoming message
-            int valread;
-            if ((valread = read(sd, buffer, BUFFSIZE - 1)) == 0) {
-                // somebody disconnected, get his details and
-                // print
-                struct sockaddr_in address;
-                socklen_t addrlen;
-                getpeername(sd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
-                printf("Host disconnected, ip %s, port %d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-
-                // close the socket and mark as 0 in the list
-                close(sd);
-                client_socket[i] = 0;
-            } else {
-                plan_t planInit = { .sender = sd };
-                buffer[valread] = '\0';
-                paf_newMessage(paf, buffer, &planInit);
-            }
-#pragma endregion
+            handleClient(sd, i);
         }
     }
 

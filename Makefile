@@ -7,10 +7,10 @@ INCLUDE_DIR=include/
 ODIR=bin/obj/
 
 # define dependecys
-SERVER_SRC=paf.c paf.h server.c #sqliteInterface.c sqliteInterface.h
+SERVER_SRC=paf.c paf.h server.c server.h storage.c storage.h
 SERVER_DEPS=queue vec sqlite3
 SERVER_EXTRA_DEPS=$(include)initDB.h
-SERVER_LIBS=-lpthread -ldl
+SERVER_LIBS=-lpthread -ldl -lcrypto
 
 CLIENT_SRC=client.c terman.c terman.h
 CLIENT_DEPS=
