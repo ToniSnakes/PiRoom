@@ -61,7 +61,7 @@ $(ODIR)%.o: deps/%.c
 # this copys the db initialisation in initDB.sql into a string in include/initDB.h
 $(include)initDB.h: src/database/initDB.sql
 	echo "const char initDB[] =" > include/initDB.h
-	cat src/database/initDB.sql | sed -e 's/\\/\\\\/g;s/"/\\"/g;s/\(.*\)/"\1"/' >> include/initDB.h
+	cat src/database/initDB.sql | sed -e 's/\\/\\\\/g;s/"/\\"/g;s/\(.*\)/"\1\\n"/' >> include/initDB.h
 	echo ";" >> include/initDB.h
 
 # build client and server

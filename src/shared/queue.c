@@ -9,7 +9,6 @@ struct queue_struct {
     unsigned int offset;
     void** data;
 };
-typedef struct queue_struct queue_t;
 
 const queue_t empty_queue = { .capacity = 0, .offset = 0, .count = 0, .data = NULL };
 
